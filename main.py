@@ -1,4 +1,6 @@
+import os
 import io
+import json
 import uuid
 import requests
 from fastapi import FastAPI, HTTPException, Form, UploadFile, File
@@ -27,16 +29,13 @@ async def upload_asset(
     mode: str = Form(...),
     image_file: UploadFile = File(...)
 ):
-    # 1. Determine sizing dimensions
     width, height = (100, 1024) if mode == "vertical" else (1024, 100)
     
     try:
-        # 2. Read and resize the provided background image
         input_bytes = await image_file.read()
         base_img = Image.open(io.BytesIO(input_bytes)).convert("RGBA")
         base_img = base_img.resize((width, height), Image.Resampling.LANCZOS)
         
-        # 3. Generate the checkerboard overlay pattern
         checker_img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         pixels = checker_img.load()
         for y in range(height):
@@ -44,17 +43,14 @@ async def upload_asset(
                 if (x + y) % 2 == 0:
                     pixels[x, y] = (0, 0, 0, 255)
                     
-        # 4. Composite the checkerboard directly ABOVE the provided image
         final_img = Image.alpha_composite(base_img, checker_img)
                     
-        # 5. Save the composite image to a buffer
         img_byte_arr = io.BytesIO()
         final_img.save(img_byte_arr, format='PNG')
         img_byte_arr.seek(0)
     except Exception as img_err:
         raise HTTPException(status_code=400, detail=f"Invalid image file format: {str(img_err)}")
 
-    # 6. Setup Roblox asset data context
     creator_config = {}
     if target_type == "group":
         creator_config["groupId"] = target_id
@@ -72,8 +68,9 @@ async def upload_asset(
         }
     }
 
+    # FIX: Remove requests.utils.quote and dump cleanly as raw standard JSON strings
     files = {
-        'request': (None, requests.utils.quote(str(asset_request)), 'application/json'),
+        'request': (None, json.dumps(asset_request), 'application/json'),
         'fileContent': (f'checkerboard_{width}x{height}.png', img_byte_arr, 'image/png')
     }
     

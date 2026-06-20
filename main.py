@@ -15,6 +15,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ADD THIS: Simple homepage route so you don't get a 404 when visiting the URL directly
+@app.get("/")
+async def root():
+    return {"status": "online", "message": "ZepAsset v1 Backend is running!"}
+
 @app.post("/upload")
 async def upload_asset(
     api_key: str = Form(...),
@@ -74,5 +79,4 @@ async def upload_asset(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Vercel needs this handler routing mapping
 handler = app

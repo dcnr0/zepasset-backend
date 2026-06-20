@@ -8,7 +8,7 @@ from PIL import Image
 
 app = FastAPI()
 
-# Allow your Chrome extension frontend to communicate securely with the server
+# Enable CORS so your Chrome extension frontend can securely communicate with the server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -24,10 +24,10 @@ async def upload_asset(
     target_id: str = Form(...),
     mode: str = Form(...)
 ):
-    # Determine sizing dimensions
+    # 1. Determine sizing dimensions based on user mode selection
     width, height = (100, 1024) if mode == "vertical" else (1024, 100)
     
-    # Generate the transparent and black checkerboard matrix
+    # 2. Generate the transparent and black checkerboard matrix using Pillow
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     pixels = img.load()
     for y in range(height):
@@ -35,19 +35,19 @@ async def upload_asset(
             if (x + y) % 2 == 0:
                 pixels[x, y] = (0, 0, 0, 255)
                 
-    # Save the bytes locally to a buffer stream
+    # 3. Save the image bytes to a buffer stream
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
 
-    # Context structure check (User ID vs Group ID mapping)
+    # 4. Check target context configuration (User ID vs Group ID mapping)
     creator_config = {}
     if target_type == "group":
         creator_config["groupId"] = target_id
     else:
         creator_config["userId"] = target_id
 
-    # Generate a random UUID version 4 string for the asset title
+    # Generate a completely random UUID version 4 string for the asset title
     random_title = str(uuid.uuid4())
 
     asset_request = {
@@ -59,7 +59,7 @@ async def upload_asset(
         }
     }
 
-    # Dispatch multipart/form-data transaction payloads directly to Roblox
+    # 5. Dispatch multipart/form-data transaction payloads directly to Roblox Assets API
     files = {
         'request': (None, requests.utils.quote(str(asset_request)), 'application/json'),
         'fileContent': (f'checkerboard_{width}x{height}.png', img_byte_arr, 'image/png')

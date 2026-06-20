@@ -1,7 +1,7 @@
 import io
 import uuid
 import requests
-from fastapi import FastAPI, HTTPException, Form
+from fastapi import FastAPI, HTTPException, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
@@ -15,31 +15,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ADD THIS: Simple homepage route so you don't get a 404 when visiting the URL directly
 @app.get("/")
 async def root():
-    return {"status": "online", "message": "ZepAsset v1 Backend is running!"}
+    return {"status": "online", "message": "ZepAsset v1 Overlay Backend is running!"}
 
 @app.post("/upload")
 async def upload_asset(
     api_key: str = Form(...),
     target_type: str = Form(...),
     target_id: str = Form(...),
-    mode: str = Form(...)
+    mode: str = Form(...),
+    image_file: UploadFile = File(...)
 ):
+    # 1. Determine sizing dimensions
     width, height = (100, 1024) if mode == "vertical" else (1024, 100)
     
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    pixels = img.load()
-    for y in range(height):
-        for x in range(width):
-            if (x + y) % 2 == 0:
-                pixels[x, y] = (0, 0, 0, 255)
-                
-    img_byte_arr = io.BytesIO()
-    img.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
+    try:
+        # 2. Read and resize the provided background image
+        input_bytes = await image_file.read()
+        base_img = Image.open(io.BytesIO(input_bytes)).convert("RGBA")
+        base_img = base_img.resize((width, height), Image.Resampling.LANCZOS)
+        
+        # 3. Generate the checkerboard overlay pattern
+        checker_img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        pixels = checker_img.load()
+        for y in range(height):
+            for x in range(width):
+                if (x + y) % 2 == 0:
+                    pixels[x, y] = (0, 0, 0, 255)
+                    
+        # 4. Composite the checkerboard directly ABOVE the provided image
+        final_img = Image.alpha_composite(base_img, checker_img)
+                    
+        # 5. Save the composite image to a buffer
+        img_byte_arr = io.BytesIO()
+        final_img.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+    except Exception as img_err:
+        raise HTTPException(status_code=400, detail=f"Invalid image file format: {str(img_err)}")
 
+    # 6. Setup Roblox asset data context
     creator_config = {}
     if target_type == "group":
         creator_config["groupId"] = target_id
